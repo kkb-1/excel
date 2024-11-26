@@ -127,13 +127,8 @@ func (data DBData) GetRow(index any, row interface{}) error {
 		return errors.New("index is not int64")
 	}
 
-	var where DeviceGpuMission
-	where.DeviceID = deviceID
-
-	err := data.Model(&DeviceGpuMission{}).Where(&where).Find(row).Error
-	if err != nil {
-		return err
-	}
+	//err := data.Model(&DeviceGpuMission{}).Where(&where).Find(row).Error
+	row = allData[deviceID].DeviceGpuMissions
 
 	return nil
 }
@@ -170,9 +165,8 @@ func (data DBData) InsertRow(file *excelize.File, index any) error {
 
 func (data DBData) GetDeviceIDs() ([]int64, error) {
 	var deviceIDs []int64
-	err := data.Model(&Device{}).Select("id").Find(&deviceIDs).Error
-	if err != nil {
-		return nil, err
+	for i := 0; i < len(allDeviceData); i++ {
+		deviceIDs = append(deviceIDs, allDeviceData[i].ID)
 	}
 	return deviceIDs, nil
 }
@@ -192,6 +186,57 @@ func getCell(col, row int) string {
 
 func (data DBData) getDevice(id int64) Device {
 	var device Device
-	data.Model(&Device{}).Where("id = ?", id).First(&device)
+	device = allData[id]
 	return device
+}
+
+func (data DBData) GetAllDevices() ([]Device, error) {
+	var devices []Device
+	err := data.Model(&Device{}).Find(&devices).Error
+	if err != nil {
+		return nil, err
+	}
+	return devices, nil
+}
+
+func (data DBData) GetAllMissions() ([]DeviceGpuMission, error) {
+	var missions []DeviceGpuMission
+	err := data.Model(&DeviceGpuMission{}).Find(&missions).Error
+	if err != nil {
+		return nil, err
+	}
+	return missions, nil
+}
+
+var allData map[int64]Device
+var allMissionData []DeviceGpuMission
+var allDeviceData []Device
+
+func (data DBData) MapDeviceAndMission() (map[int64]Device, error) {
+	devices, err := data.GetAllDevices()
+	if err != nil {
+		return nil, err
+	}
+	allDeviceData = devices
+
+	missions, err := data.GetAllMissions()
+	if err != nil {
+		return nil, err
+	}
+	allMissionData = missions
+
+	var result = make(map[int64]Device)
+	for i := 0; i < len(devices); i++ {
+		devices[i].DeviceGpuMissions = make([]DeviceGpuMission, 0)
+		result[devices[i].ID] = devices[i]
+	}
+	for i := 0; i < len(missions); i++ {
+		if _, exists := result[missions[i].DeviceID]; exists {
+			gpuMissions := result[missions[i].DeviceID].DeviceGpuMissions
+			gpuMissions = append(gpuMissions, missions[i])
+		}
+	}
+
+	allData = result
+	return result, nil
 }
