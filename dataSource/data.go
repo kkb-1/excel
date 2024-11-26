@@ -3,6 +3,7 @@ package dataSource
 import (
 	"errors"
 	"fmt"
+	"github.com/jinzhu/copier"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 	"strings"
@@ -22,7 +23,7 @@ var firstRows = []string{
 	"设备id",
 	"节点机器",
 	"sd_time",
-	"sd_cmd_time,sd_pro_time",
+	"sd_pro_time",
 	"txt2img",
 	"img2img",
 	"jp_time",
@@ -37,6 +38,8 @@ var firstRows = []string{
 	"sglang_gemma_time",
 	"sglang_llama_time",
 	"sd_tomato_time",
+	"sd_cmd_time",
+	"sd_webui_cxqf_time",
 	"sd_webui_forge_time",
 	"sd_webui_base_time",
 	"sd_tian_time",
@@ -44,6 +47,8 @@ var firstRows = []string{
 	"fooocus_time",
 	"fooocus_lan_que_time",
 	"fooocus_lan_que_en_time",
+	"sovits_ui_time",
+	"sovits_api_time",
 	"fooocus_sha_api_time",
 	"tabby_time",
 	"ollama_time",
@@ -52,6 +57,7 @@ var firstRows = []string{
 	"sd_cat_time",
 	"sd_fire_time",
 	"comfyui_time",
+	"comfyui_pro_time",
 	"comfyui_advance_time",
 	"comfyui_advance_en_time",
 	"jp_dk_3_time",
@@ -69,13 +75,15 @@ var firstRows = []string{
 	"lora_time",
 	"lora_flux_time",
 	"lora_flux_gym_time",
+	"lora_flux_gym_en_time",
 	"fooocus_wu_time",
 	"svd_back_time",
 	"sd_ji_time",
 	"sd_shang_jin_time",
 	"sd_xiao_chun_time",
-	"comfyui_wu_time,comfyui_pro_time",
+	"comfyui_wu_time",
 	"comfyui_advance_aisay_time",
+	"comfyui_advance_sz_time",
 	"comfyui_sxkk_time",
 	"comfyui_liu_time",
 	"sd_qkk_time",
@@ -88,6 +96,7 @@ var firstRows = []string{
 	"comfyui_star_time",
 	"waiting_time",
 	"waiting_aleo_time",
+	"waiting_al_time",
 	"opencl_core_time",
 	"io_paint_time",
 	"cogvideo_time",
@@ -128,8 +137,10 @@ func (data DBData) GetRow(index any, row interface{}) error {
 	}
 
 	//err := data.Model(&DeviceGpuMission{}).Where(&where).Find(row).Error
-	row = allData[deviceID].DeviceGpuMissions
-
+	missions := allData[deviceID].DeviceGpuMissions
+	for i := 0; i < len(missions); i++ {
+		copier.Copy(row, missions[i])
+	}
 	return nil
 }
 
@@ -138,7 +149,9 @@ func (data DBData) InsertRow(file *excelize.File, index any) error {
 	var device Device
 	var missions []DeviceGpuMission
 	err := data.GetRow(index, &missions)
+	fmt.Printf("missions len: %v\n", len(missions))
 	if err != nil {
+		fmt.Printf("GetRow error: %v\n", err)
 		return err
 	}
 	device = data.getDevice(index.(int64))
@@ -149,9 +162,11 @@ func (data DBData) InsertRow(file *excelize.File, index any) error {
 	for i := 0; i < len(missions); i++ {
 		var mission string
 		mission = missions[i].AbleMissionKind
+		fmt.Printf("AbleMissionKind: %s\n", mission)
 		for j := 0; j < len(firstRows); j++ {
 			//有对应任务就勾选
 			if strings.Contains(mission, firstRows[j]) {
+				fmt.Printf("mission: %s\n", firstRows[j])
 				cell := getCell(j, data.Row)
 				err := file.SetCellValue("Sheet1", cell, "√")
 				if err != nil {
@@ -164,6 +179,10 @@ func (data DBData) InsertRow(file *excelize.File, index any) error {
 }
 
 func (data DBData) GetDeviceIDs() ([]int64, error) {
+	_, err := data.MapDeviceAndMission()
+	if err != nil {
+		return nil, err
+	}
 	var deviceIDs []int64
 	for i := 0; i < len(allDeviceData); i++ {
 		deviceIDs = append(deviceIDs, allDeviceData[i].ID)
@@ -186,12 +205,12 @@ func getCell(col, row int) string {
 
 func (data DBData) getDevice(id int64) Device {
 	var device Device
-	device = allData[id]
+	device = *(allData[id])
 	return device
 }
 
-func (data DBData) GetAllDevices() ([]Device, error) {
-	var devices []Device
+func (data DBData) GetAllDevices() ([]*Device, error) {
+	var devices []*Device
 	err := data.Model(&Device{}).Find(&devices).Error
 	if err != nil {
 		return nil, err
@@ -199,8 +218,8 @@ func (data DBData) GetAllDevices() ([]Device, error) {
 	return devices, nil
 }
 
-func (data DBData) GetAllMissions() ([]DeviceGpuMission, error) {
-	var missions []DeviceGpuMission
+func (data DBData) GetAllMissions() ([]*DeviceGpuMission, error) {
+	var missions []*DeviceGpuMission
 	err := data.Model(&DeviceGpuMission{}).Find(&missions).Error
 	if err != nil {
 		return nil, err
@@ -208,11 +227,11 @@ func (data DBData) GetAllMissions() ([]DeviceGpuMission, error) {
 	return missions, nil
 }
 
-var allData map[int64]Device
-var allMissionData []DeviceGpuMission
-var allDeviceData []Device
+var allData map[int64]*Device
+var allMissionData []*DeviceGpuMission
+var allDeviceData []*Device
 
-func (data DBData) MapDeviceAndMission() (map[int64]Device, error) {
+func (data DBData) MapDeviceAndMission() (map[int64]*Device, error) {
 	devices, err := data.GetAllDevices()
 	if err != nil {
 		return nil, err
@@ -225,16 +244,17 @@ func (data DBData) MapDeviceAndMission() (map[int64]Device, error) {
 	}
 	allMissionData = missions
 
-	var result = make(map[int64]Device)
+	var result = make(map[int64]*Device)
 	for i := 0; i < len(devices); i++ {
 		devices[i].DeviceGpuMissions = make([]DeviceGpuMission, 0)
 		result[devices[i].ID] = devices[i]
 	}
+
 	for i := 0; i < len(missions); i++ {
-		if _, exists := result[missions[i].DeviceID]; exists {
-			gpuMissions := result[missions[i].DeviceID].DeviceGpuMissions
-			gpuMissions = append(gpuMissions, missions[i])
-		}
+		id := missions[i].DeviceID
+		device := result[id]
+		device.DeviceGpuMissions = append(device.DeviceGpuMissions, *missions[i])
+		fmt.Printf("device id: %v, missions len: %v\n", id, len(result[id].DeviceGpuMissions))
 	}
 
 	allData = result
