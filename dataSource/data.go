@@ -137,6 +137,9 @@ func (data DBData) GetRow(index any, row interface{}) error {
 	}
 
 	//err := data.Model(&DeviceGpuMission{}).Where(&where).Find(row).Error
+	if _, ok := allData[deviceID]; !ok {
+		return errors.New("deviceID not found")
+	}
 	missions := allData[deviceID].DeviceGpuMissions
 	for i := 0; i < len(missions); i++ {
 		copier.Copy(row, missions[i])
@@ -185,6 +188,10 @@ func (data DBData) GetDeviceIDs() ([]int64, error) {
 	}
 	var deviceIDs []int64
 	for i := 0; i < len(allDeviceData); i++ {
+		if allDeviceData[i].Version == "无版本号" || allDeviceData[i].Status == "exit" {
+			continue
+		}
+
 		deviceIDs = append(deviceIDs, allDeviceData[i].ID)
 	}
 	return deviceIDs, nil
