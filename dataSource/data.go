@@ -10,7 +10,7 @@ import (
 )
 
 type DataSource interface {
-	GetRow(index any) ([]interface{}, error)        // 获取一行数据
+	GetRow(index any, row interface{}) error        // 获取一行数据
 	InsertRow(file *excelize.File, index any) error // 插入一行数据
 }
 
@@ -155,7 +155,7 @@ func (data DBData) InsertRow(file *excelize.File, index any) error {
 		return err
 	}
 	device = data.getDevice(index.(int64))
-	deviceName := device.Name
+	deviceName := device.ManageName
 
 	err = file.SetCellValue("Sheet1", getCell(1, data.Row), deviceName)
 
@@ -244,15 +244,27 @@ func (data DBData) MapDeviceAndMission() (map[int64]*Device, error) {
 	}
 	allMissionData = missions
 
+	// select * from devices as d left join device_gpu_missions as dgm on d.id=dgm.device_id
+	// where d.id = 123456 and d.version<>'无版本号' and d.status<>'exit' and dgm.gpu_status<>'exit' group by d.id;
 	var result = make(map[int64]*Device)
 	for i := 0; i < len(devices); i++ {
+		if devices[i].Version == "无版本号" || devices[i].Status == "exit" {
+			continue
+		}
 		devices[i].DeviceGpuMissions = make([]DeviceGpuMission, 0)
 		result[devices[i].ID] = devices[i]
 	}
 
 	for i := 0; i < len(missions); i++ {
+		if missions[i].GpuStatus == "exit" {
+			continue
+		}
+
 		id := missions[i].DeviceID
-		device := result[id]
+		device, ok := result[id]
+		if !ok {
+			continue
+		}
 		device.DeviceGpuMissions = append(device.DeviceGpuMissions, *missions[i])
 		fmt.Printf("device id: %v, missions len: %v\n", id, len(result[id].DeviceGpuMissions))
 	}
